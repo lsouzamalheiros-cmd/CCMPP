@@ -13,7 +13,7 @@ import pytz
 
 import base64
 
-st.set_page_config(page_title="Sistema Escolar - CCMPP by Leandro Malheiros V2.0.3 ", layout="centered")
+st.set_page_config(page_title="Sistema Escolar - CCMDZ by Leandro Malheiros V2.0.3 ", layout="centered")
 
 # --- Estilização Visual ---
 st.markdown("""
@@ -70,6 +70,28 @@ def conectar():
     return cliente["escola"]
 
 db = conectar()
+# --- Criar usuário admin padrão (primeira execução) ---
+def criar_admin_padrao():
+    if db.usuarios.count_documents({}) == 0:
+        usuario_padrao = "admin"
+        senha_padrao = "admin123"
+
+        senha_hash = hashlib.sha256(senha_padrao.encode()).hexdigest()
+
+        db.usuarios.insert_one({
+            "usuario": usuario_padrao,
+            "senha": senha_hash,
+            "nivel": "admin"
+        })
+
+        print("✅ Usuário admin padrão criado!")
+        try:
+            st.warning("⚠️ Usuário padrão criado → admin / admin123 (altere após login!)")
+        except:
+            pass
+
+# CHAMADA DA FUNÇÃO
+criar_admin_padrao()
 
 print("--- Coleções no banco 'escola' ---")
 print(db.list_collection_names())
