@@ -430,58 +430,95 @@ def pagina_cadastro():
     if limpar:
         st.rerun()
 
-    # --- Importação de alunos via arquivo ---
-    st.subheader("📥 Importar Alunos via TXT ou CSV")
-    arquivo = st.file_uploader("Escolha o arquivo .txt ou .csv", type=["txt", "csv"])
-    delimitador = st.selectbox("Escolha o delimitador", [";", ",", "\\t"])
-    delimitador_real = {";": ";", ",": ",", "\\t": "\t"}[delimitador]
+  # --- Importação de alunos via arquivo ---
+st.subheader("📥 Importar Alunos via TXT ou CSV")
 
-    if arquivo is not None:
-        try:
-            df_import = pd.read_csv(arquivo, delimiter=delimitador_real)
-            df_import.columns = [col.strip().lower() for col in df_import.columns]
-            st.dataframe(df_import)
+arquivo = st.file_uploader("Escolha o arquivo .txt ou .csv", type=["txt", "csv"])
 
-            if st.button("Importar para o Sistema"):
-                erros = []
-                total_importados = 0
-                for _, row in df_import.iterrows():
-                    try:
-                        cgm = str(row.get('cgm', '')).strip()
-                        nome = str(row.get('nome', '')).strip()
-                        data = str(row.get('data', '')).strip()
-                        telefone = str(row.get('telefone', '')).strip()
-                        responsavel = str(row.get('responsavel', '')).strip()
-                        turma = str(row.get('turma', '')).strip()
+if arquivo is not None:
+    try:
+        # 🔥 DETECÇÃO AUTOMÁTICA DE DELIMITADOR
+        conteudo = arquivo.read().decode("utf-8", errors="ignore")
 
-                        if not cgm or not nome:
-                            erros.append(f"CGM ou Nome ausente na linha: {row.to_dict()}")
-                            continue
+        if "\t" in conteudo:
+            sep = "\t"
+        elif ";" in conteudo:
+            sep = ";"
+        elif "," in conteudo:
+            sep = ","
+        else:
+            st.error("❌ Não foi possível identificar o delimitador do arquivo.")
+            st.stop()
 
-                        aluno = {
-                            "cgm": cgm,
-                            "nome": nome,
-                            "data": data,
-                            "telefone": telefone,
-                            "responsavel": responsavel,
-                            "turma": turma
-                        }
+        # 🔥 LÊ O DATAFRAME CORRETAMENTE
+        df_import = pd.read_csv(
+            pd.io.common.StringIO(conteudo),
+            sep=sep
+        )
 
-                        db.alunos.update_one({"cgm": cgm}, {"$set": aluno}, upsert=True)
-                        total_importados += 1
+        # 🔥 LIMPA NOMES DAS COLUNAS
+        df_import.columns = [col.strip().lower() for col in df_import.columns]
 
-                    except Exception as e:
-                        erros.append(f"Erro na linha {row.to_dict()} → {e}")
+        # 🔥 RENOMEIA COLUNAS (caso venham diferentes)
+        df_import = df_import.rename(columns={
+            "nome do estudante": "nome",
+            "data de nasc.": "data"
+        })
 
-                st.success(f"✅ Importação finalizada. Total importado/atualizado: {total_importados}")
-                if erros:
-                    st.warning("⚠️ Erros encontrados:")
-                    for erro in erros:
-                        st.error(erro)
+        st.write("### 🔍 Pré-visualização")
+        st.dataframe(df_import)
 
-        except Exception as e:
-            st.error(f"Erro ao ler o arquivo: {e}")
+        if st.button("Importar para o Sistema"):
 
+            total = 0
+            erros = []
+
+            for _, row in df_import.iterrows():
+                try:
+                    cgm = str(row.get("cgm", "")).strip()
+                    nome = str(row.get("nome", "")).strip()
+                    data = str(row.get("data", "")).strip()
+                    telefone = str(row.get("telefone", "")).strip()
+                    turma = str(row.get("turma", "")).strip()
+
+                    if not nome:
+                        erros.append(f"❌ Nome vazio: {row.to_dict()}")
+                        continue
+
+                    # 🔥 gera CGM automático se não tiver
+                    if not cgm:
+                        cgm = str(uuid.uuid4())[:10]
+
+                    aluno = {
+                        "cgm": cgm,
+                        "nome": nome,
+                        "data": data,
+                        "telefone": telefone,
+                        "turma": turma,
+                        "responsavel": ""
+                    }
+
+                    db.alunos.update_one(
+                        {"cgm": cgm},
+                        {"$set": aluno},
+                        upsert=True
+                    )
+
+                    total += 1
+
+                except Exception as e:
+                    erros.append(f"{row.to_dict()} → {e}")
+
+            st.success(f"✅ Importados: {total}")
+
+            if erros:
+                st.warning("⚠️ Erros:")
+                for erro in erros[:20]:
+                    st.error(erro)
+
+    except Exception as e:
+        st.error(f"Erro ao processar arquivo: {e}")
+        
 def pagina_ocorrencias():
     st.markdown("## 🚨 Registro de Ocorrência")
 
