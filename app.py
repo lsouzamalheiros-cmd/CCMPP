@@ -430,57 +430,85 @@ def pagina_cadastro():
     if limpar:
         st.rerun()
 
-    # --- Importação de alunos via arquivo ---
-    st.subheader("📥 Importar Alunos via TXT ou CSV")
-    arquivo = st.file_uploader("Escolha o arquivo .txt ou .csv", type=["txt", "csv"])
-    delimitador = st.selectbox("Escolha o delimitador", [";", ",", "\\t"])
-    delimitador_real = {";": ";", ",": ",", "\\t": "\t"}[delimitador]
+   # --- Importação de alunos via arquivo ---
+	st.subheader("📥 Importar Alunos via TXT ou CSV")
+	arquivo = st.file_uploader("Escolha o arquivo .txt ou .csv", type=["txt", "csv"])
 
-    if arquivo is not None:
-        try:
-            df_import = pd.read_csv(arquivo, delimiter=delimitador_real)
-            df_import.columns = [col.strip().lower() for col in df_import.columns]
-            st.dataframe(df_import)
+	if arquivo is not None:
+		try:
+			# ===== TENTA LER AUTOMÁTICO =====
+			df_import = pd.read_csv(arquivo, sep=None, engine="python")
 
-            if st.button("Importar para o Sistema"):
-                erros = []
-                total_importados = 0
-                for _, row in df_import.iterrows():
-                    try:
-                        cgm = str(row.get('cgm', '')).strip()
-                        nome = str(row.get('nome', '')).strip()
-                        data = str(row.get('data', '')).strip()
-                        telefone = str(row.get('telefone', '')).strip()
-                        responsavel = str(row.get('responsavel', '')).strip()
-                        turma = str(row.get('turma', '')).strip()
+			# ===== CORREÇÃO PARA ARQUIVO BUGADO (TUDO EM 1 COLUNA) =====
+			if len(df_import.columns) == 1:
+				st.warning("⚠️ Arquivo veio em uma única coluna. Tentando corrigir automaticamente...")
 
-                        if not cgm or not nome:
-                            erros.append(f"CGM ou Nome ausente na linha: {row.to_dict()}")
-                            continue
+				arquivo.seek(0)
+				df_import = pd.read_csv(arquivo, delimiter="\t")
 
-                        aluno = {
-                            "cgm": cgm,
-                            "nome": nome,
-                            "data": data,
-                            "telefone": telefone,
-                            "responsavel": responsavel,
-                            "turma": turma
-                        }
+			# ===== PADRONIZA COLUNAS =====
+			df_import.columns = [col.strip().lower() for col in df_import.columns]
 
-                        db.alunos.update_one({"cgm": cgm}, {"$set": aluno}, upsert=True)
-                        total_importados += 1
+			# ===== RENOMEAR COLUNAS POSSÍVEIS =====
+			mapa_colunas = {
+				"nome do estudante": "nome",
+				"data de nasc.": "data",
+				"telefone": "telefone",
+				"turma": "turma",
+				"cgm": "cgm"
+			}
 
-                    except Exception as e:
-                        erros.append(f"Erro na linha {row.to_dict()} → {e}")
+			df_import.rename(columns=mapa_colunas, inplace=True)
 
-                st.success(f"✅ Importação finalizada. Total importado/atualizado: {total_importados}")
-                if erros:
-                    st.warning("⚠️ Erros encontrados:")
-                    for erro in erros:
-                        st.error(erro)
+			st.success("✅ Arquivo carregado com sucesso!")
+			st.dataframe(df_import)
 
-        except Exception as e:
-            st.error(f"Erro ao ler o arquivo: {e}")
+			if st.button("🚀 Importar para o Sistema"):
+				erros = []
+				total_importados = 0
+
+				for _, row in df_import.iterrows():
+					try:
+						cgm = str(row.get("cgm", "")).strip()
+						nome = str(row.get("nome", "")).strip()
+						data = str(row.get("data", "")).strip()
+						telefone = str(row.get("telefone", "")).strip()
+						responsavel = str(row.get("responsavel", "")).strip()
+						turma = str(row.get("turma", "")).strip()
+
+						if not cgm or not nome:
+							erros.append(f"❌ CGM ou Nome ausente: {row.to_dict()}")
+							continue
+
+						aluno = {
+							"cgm": cgm,
+							"nome": nome,
+							"data": data,
+							"telefone": telefone,
+							"responsavel": responsavel,
+							"turma": turma
+						}
+
+						db.alunos.update_one(
+							{"cgm": cgm},
+							{"$set": aluno},
+							upsert=True
+						)
+
+						total_importados += 1
+
+					except Exception as e:
+						erros.append(f"Erro: {row.to_dict()} → {e}")
+
+				st.success(f"✅ Importação finalizada: {total_importados} alunos")
+
+				if erros:
+					st.warning("⚠️ Problemas encontrados:")
+					for erro in erros:
+						st.error(erro)
+
+		except Exception as e:
+			st.error(f"❌ Erro ao ler o arquivo: {e}")
 
 def pagina_ocorrencias():
     st.markdown("## 🚨 Registro de Ocorrência")
