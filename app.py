@@ -432,7 +432,7 @@ def pagina_cadastro():
 
    # --- Importação de alunos via arquivo ---
 st.subheader("📥 Importar Alunos via TXT ou CSV")
-	arquivo = st.file_uploader("Escolha o arquivo .txt ou .csv", type=["txt", "csv"])
+arquivo = st.file_uploader("Escolha o arquivo .txt ou .csv", type=["txt", "csv"])
 
 	if arquivo is not None:
 		try:
